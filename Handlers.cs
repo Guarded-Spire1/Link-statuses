@@ -13,48 +13,25 @@ namespace Link_statuses
 {
     static public class Handlers
     {
-        private readonly static string _folder;
-        private readonly static string _pathToUsers;
-        private readonly static string _pathToUsersStates;
-        private readonly static string _pathToUrls;
+        private readonly static string _folder = Path.Combine(AppContext.BaseDirectory, "Data");
+        private readonly static string _pathToUsersData = Path.Combine(_folder, "usersData");
 
-        private static string? jsonUsers;
-        private static string? jsonUserStates;
-        private static string? jsonUsersUrls;
-
-        public static Dictionary<long, string> _users;
-        public static Dictionary<long, string> _userStates;
-        public static List<string>? _usersUrls;
-        public static Dictionary<long, Dictionary<string, int>> _usersData;
-
+        public static readonly Dictionary<long, BotUser> Users = new Dictionary<long, BotUser>();
         static Handlers()
         {
-
-            _folder = Path.Combine(AppContext.BaseDirectory, "UsersData");
-
-            _pathToUrls = Path.Combine(_folder, "urls.json");
-            _pathToUsersStates = Path.Combine(_folder, "userStates.json");
-            _pathToUsers = Path.Combine(_folder, "users.json");
-
             Directory.CreateDirectory(_folder);
 
-            var files = Directory.GetFiles(_folder);
-            var requiredFiles = new List<string> { _pathToUrls, _pathToUsersStates, _pathToUsers };
-            foreach (var file in requiredFiles)
-            {
-                if (!files.Contains(file))
-                {
-                    File.WriteAllText(file, "[]");
-                }
-            }
+            if (!File.Exists(_pathToUsersData))
+                File.WriteAllText(_pathToUsersData, "{}");
 
-            jsonUsers = File.ReadAllText(_pathToUsers);
-            jsonUserStates = File.ReadAllText(_pathToUsersStates);
-            jsonUsersUrls = File.ReadAllText(_pathToUrls);
+            string json = File.ReadAllText(_pathToUsersData);
+            Users = JsonSerializer.Deserialize<Dictionary<long, BotUser>>(json) ?? new Dictionary<long, BotUser>();
+        }
 
-            _usersUrls = JsonSerializer.Deserialize<List<string>>(jsonUsersUrls) ?? new List<string>();
-            _userStates = JsonSerializer.Deserialize<Dictionary<long, string>>(jsonUserStates) ?? new Dictionary<long, string>();
-            _users = JsonSerializer.Deserialize<Dictionary<long, string>>(jsonUsers) ?? new Dictionary<long, string>();
+        public static void SaveUsersData()
+        {
+            string json = JsonSerializer.Serialize(Users);
+            File.WriteAllText(_pathToUsersData, json);
         }
 
         public static string TrimLink(string link)
@@ -68,118 +45,153 @@ namespace Link_statuses
             return Uri.TryCreate(url, UriKind.Absolute, out Uri? uriResult)
                 && (uriResult.Scheme == Uri.UriSchemeHttp || uriResult.Scheme == Uri.UriSchemeHttps);
         }
-        private static async Task AddLinkToTracking(ITelegramBotClient bot, Update update)
-        {
-            jsonUsersUrls = File.ReadAllText(_pathToUrls);
-            _usersUrls = JsonSerializer.Deserialize<List<string>>(jsonUsersUrls);
-            if (_usersUrls != null && !_usersUrls.Contains(TrimLink(update.Message.Text)))
-            {
-                _usersUrls.Add(TrimLink(update.Message.Text));
-                var newJson = JsonSerializer.Serialize(_usersUrls);
-                File.WriteAllText(_pathToUrls, newJson);
-                await bot.SendMessage(update.Message.Chat.Id, "Link added to trackings");
-            }
-            else { await bot.SendMessage(update.Message.Chat.Id, "Link is already tracked"); }
-
-        }
-        private static async Task DeleteLinkFromTracking(ITelegramBotClient bot, Update update)
-        {
-            if (!string.IsNullOrEmpty(update.Message.Text) && _usersUrls.Contains(TrimLink(update.Message.Text)))
-            {
-                _usersUrls.Remove(TrimLink(update.Message.Text));
-                var newJson = JsonSerializer.Serialize(_usersUrls);
-                File.WriteAllText(_pathToUrls, newJson);
-                await bot.SendMessage(update.Message.Chat.Id, "Link removed from trackings");
-            }
-            else { await bot.SendMessage(update.Message.Chat.Id, "Invalid link, try again"); }
-        }
 
         public static async Task MessageHandle(ITelegramBotClient bot, Update update)
         {
-            if (update.Message.Text == "/start")
+            if (update.Message == null || string.IsNullOrWhiteSpace(update.Message.Text))
             {
-                if (!_users.ContainsKey(update.Message.Chat.Id))
-                    _users.Add(update.Message.Chat.Id, update.Message.Chat.Username);
-                await bot.SendMessage(update.Message.Chat.Id, "Welcome to Link Status Bot!\nUse /show to see tracked links\nUse /add to add new link\nUse /delete to delete link from trackings\nUse /clear to delete all links from trackings");
-            }
-            else if (update.Message.Text == "/show")
-            {
-                if (_usersUrls != null && _usersUrls.Count > 0)
-                    await bot.SendMessage(update.Message.Chat.Id, $"Currently tracked links:\n{string.Join("\n", _usersUrls)}");
-
-                else
-                    await bot.SendMessage(update.Message.Chat.Id, "No links are currently being tracked.");
-
-            }
-            else if (update.Message.Text == "/add")
-            {
-                _userStates[update.Message.Chat.Id] = "add_link";
-                await bot.SendMessage(update.Message.Chat.Id, "Send link to track");
+                Console.WriteLine("Something went wrong");
                 return;
-
             }
-            else if (update.Message.Text == "/delete")
+
+            string command = !string.IsNullOrWhiteSpace(update.Message?.Text)
+                             ? update.Message.Text.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()
+                             ?? ""
+                             : "";
+            long userId = update.Message.Chat.Id;
+            string userMessage = string.Join(" ", update.Message.Text
+                                    .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                                    .Skip(1));
+
+            if (command == "/start")
             {
-                if (_usersUrls == null || _usersUrls.Count <= 0)
+                if (!Users.ContainsKey(userId))
                 {
-                    await bot.SendMessage(update.Message.Chat.Id, "No links are currently being tracked.");
+                    Users[userId] = new BotUser();
+                    SaveUsersData();
+                    await bot.SendMessage(userId,
+                        "You are registered now!\n\n" +
+                        "This bot helps you track the status of your favorite links (websites).\n" +
+                        "Commands:\n" +
+                        "/add <link> - Add a link to tracking\n" +
+                        "/delete <link> - Remove a link from tracking\n" +
+                        "/show - Show all tracked links\n" +
+                        "/clear - Remove all tracked links\n\n" +
+                        "The bot will periodically check your links and notify you if any become unreachable."
+                    );
                     return;
                 }
 
-                _userStates[update.Message.Chat.Id] = "delete_link";
-                await bot.SendMessage(update.Message.Chat.Id, $"Currently tracked links:\n{string.Join("\n", _usersUrls)}");
-                await bot.SendMessage(update.Message.Chat.Id, "Choose link to delete");
-                return;
+                await bot.SendMessage(userId,
+                         "Commands:\n" +
+                         "/add <link> - Add a link to tracking\n" +
+                         "/delete <link> - Remove a link from tracking\n" +
+                         "/show - Show all tracked links\n" +
+                         "/clear - Remove all tracked links\n\n" +
+                         "The bot will periodically check your links and notify you if any become unreachable."
+                     );
             }
-            else if (update.Message.Text == "/clear")
+            else if (command == "/show")
             {
-                if (_usersUrls == null || _usersUrls.Count <= 0)
+                StringBuilder message = new StringBuilder("Currently tracked links:\n");
+                if (Users[userId].Links.Count == 0)
                 {
-                    await bot.SendMessage(update.Message.Chat.Id, "No links are currently being tracked.");
+                    await bot.SendMessage(userId, "No links are currently being tracked.");
                     return;
                 }
-                _usersUrls.Clear();
-                var newJson = JsonSerializer.Serialize(_usersUrls);
-                File.WriteAllText(_pathToUrls, newJson);
-                await bot.SendMessage(update.Message.Chat.Id, "All links removed");
-            }
 
-
-            if (_userStates.ContainsKey(update.Message.Chat.Id) && _userStates[update.Message.Chat.Id] == "add_link")
-            {
-                if (IsValidUrl(update.Message.Text))
+                foreach (var link in Users[userId].Links)
                 {
-                    await AddLinkToTracking(bot, update);
-                    _userStates.Remove(update.Message.Chat.Id);
+                    message.AppendLine($"{link}\n");
                 }
-                else { await bot.SendMessage(update.Message.Chat.Id, "Invalid link, try again:"); }
+                await bot.SendMessage(userId, message.ToString());
             }
-            else if (_userStates.ContainsKey(update.Message.Chat.Id) && _userStates[update.Message.Chat.Id] == "delete_link")
+            else if (command == "/add")
             {
-                if (IsValidUrl(update.Message.Text))
+                if (string.IsNullOrWhiteSpace(userMessage))
                 {
-                    await DeleteLinkFromTracking(bot, update);
-                    _userStates.Remove(update.Message.Chat.Id);
+                    await bot.SendMessage(userId, "To add link you need to write like this '/add example.com'");
+                    return;
                 }
-                else { await bot.SendMessage(update.Message.Chat.Id, "Invalid link, try again:"); }
+                if (!IsValidUrl(userMessage))
+                {
+                    await bot.SendMessage(userId, "Invalid link, try again:");
+                    return;
+                }
+
+                if (Users[userId].Links.Contains(TrimLink(userMessage)))
+                {
+                    await bot.SendMessage(userId, "This link is already being tracked.");
+                    return;
+                }
+
+                Users[userId].Links.Add(TrimLink(userMessage));
+                SaveUsersData();
+                await bot.SendMessage(userId, "Link added to tracking.");
+
+            }
+            else if (command == "/delete")
+            {
+                if (string.IsNullOrWhiteSpace(userMessage))
+                {
+                    await bot.SendMessage(userId, "To delete link you need to write like this '/delete example.com'");
+                    return;
+                }
+
+                if (!IsValidUrl(userMessage))
+                {
+                    await bot.SendMessage(userId, "Invalid link, try again:");
+                    return;
+                }
+
+                if (!Users[userId].Links.Contains(TrimLink(userMessage)))
+                {
+                    await bot.SendMessage(userId, "This link is not being tracked.");
+                    return;
+                }
+
+                if (Users[userId].Links.Count == 0)
+                {
+                    await bot.SendMessage(userId, "No links are currently being tracked.");
+                    return;
+                }
+
+                Users[userId].Links.Remove(TrimLink(userMessage));
+                SaveUsersData();
+                await bot.SendMessage(userId, "Link removed from tracking.");
+            }
+            else if (command == "/clear")
+            {
+                if (Users[userId].Links.Count == 0)
+                {
+                    await bot.SendMessage(userId, "No links are currently being tracked.");
+                    return;
+                }
+                Users[userId].Links.Clear();
+                SaveUsersData();
+                await bot.SendMessage(userId, "All links have been removed from tracking.");
+            }
+            else
+            {
+                await bot.SendMessage(userId, "Unknown command. Please use /start to see available commands.");
             }
         }
 
-        public static async Task SendMessage(ITelegramBotClient bot, Dictionary<string, int> responses)
-        {
-            StringBuilder message = new StringBuilder("Currently tracked links statuses: \n");
-            foreach (var response in responses)
-            {
-                if (response.Value == 0)
-                    message.AppendLine($"Link {response.Key} is unreachable ❌");
-                else
-                    message.AppendLine($"Link {response.Key} is reachable ✅");
-            }
-            foreach (var id in _users)
-            {
-                await bot.SendMessage(id.Key, message.ToString());
-            }
-        }
+        //public static async Task SendMessage(ITelegramBotClient bot, Dictionary<string, int> responses)
+        //{
+        //    StringBuilder message = new StringBuilder("Currently tracked links statuses: \n");
+        //    foreach (var response in responses)
+        //    {
+        //        if (response.Value == 0)
+        //            message.AppendLine($"Link {response.Key} is unreachable ❌");
+        //        else
+        //            message.AppendLine($"Link {response.Key} is reachable ✅");
+        //    }
+        //    foreach (var id in _users)
+        //    {
+        //        await bot.SendMessage(id.Key, message.ToString());
+        //    }
+        //}
 
     }
 }

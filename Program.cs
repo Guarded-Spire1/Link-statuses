@@ -23,15 +23,15 @@ namespace Link_statuses
             telegramBot.Start();
 
 
-            timer = new System.Timers.Timer(4000);
-            timer.Elapsed += OnTimedEvent;
-            timer.AutoReset = true;
-            timer.Enabled = true;
+            //timer = new System.Timers.Timer(4000);
+            //timer.Elapsed += OnTimedEvent;
+            //timer.AutoReset = true;
+            //timer.Enabled = true;
 
             Console.ReadLine();
 
-            timer.Stop();
-            timer.Dispose();
+            //timer.Stop();
+            //timer.Dispose();
             client.Dispose();
         }
 
@@ -49,22 +49,22 @@ namespace Link_statuses
                 return 0;
             }
         }
-        static void OnTimedEvent(object? source, ElapsedEventArgs e)
-        {
-            Task.Run(async () =>
-            {
-                if (Handlers._usersUrls != null && Handlers._usersUrls.Count != 0)
-                {
-                   var responeses = new Dictionary<string, int>();
-                    foreach (var link in Handlers._usersUrls)
-                    {
-                        var response = await Status("http://" + link);
-                        responeses.Add(link, response);
-                    }
-                    await Handlers.SendMessage(telegramBot.bot, responeses);
-                }
-                else { Console.WriteLine("No links are being tracked"); }
-            });
-        }
+        //static void OnTimedEvent(object? source, ElapsedEventArgs e)
+        //{
+        //    Task.Run(async () =>
+        //    {
+        //        if (Handlers._usersUrls != null && Handlers._usersUrls.Count != 0)
+        //        {
+        //           var responeses = new Dictionary<string, int>();
+        //            foreach (var link in Handlers._usersUrls)
+        //            {
+        //                var response = await Status("http://" + link);
+        //                responeses.Add(link, response);
+        //            }
+        //            await Handlers.SendMessage(telegramBot.bot, responeses);
+        //        }
+        //        else { Console.WriteLine("No links are being tracked"); }
+        //    });
+        //}
     }
 }
