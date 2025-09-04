@@ -15,8 +15,9 @@ namespace Link_statuses
     {
         private readonly static string _folder = Path.Combine(AppContext.BaseDirectory, "Data");
         private readonly static string _pathToUsersData = Path.Combine(_folder, "usersData");
-        private 
+        private readonly static string _pathToLogs = Path.Combine(_folder, "logs.txt");
         public static readonly Dictionary<long, BotUser> Users = new Dictionary<long, BotUser>();
+        public static readonly List<Log>Logs = new List<Log>();
         static Handlers()
         {
             Directory.CreateDirectory(_folder);
@@ -24,19 +25,28 @@ namespace Link_statuses
             if (!File.Exists(_pathToUsersData))
                 File.WriteAllText(_pathToUsersData, "{}");
 
-            string json = File.ReadAllText(_pathToUsersData);
-            Users = JsonSerializer.Deserialize<Dictionary<long, BotUser>>(json) ?? new Dictionary<long, BotUser>();
+            if (!File.Exists(_pathToLogs))
+                File.WriteAllText(_pathToLogs, "[]");
+
+            string jsonUsers = File.ReadAllText(_pathToUsersData);
+            string jsonLogs = File.ReadAllText(_pathToLogs);
+            Users = JsonSerializer.Deserialize<Dictionary<long, BotUser>>(jsonUsers) ?? new Dictionary<long, BotUser>();
+            Logs = JsonSerializer.Deserialize<List<Log>>(jsonLogs) ?? new List<Log>();
         }
         public static void SaveUsersData()
         {
-            string json = JsonSerializer.Serialize(Users);
-            File.WriteAllText(_pathToUsersData, json);
+            string jsonUsers = JsonSerializer.Serialize(Users);
+            File.WriteAllText(_pathToUsersData, jsonUsers);
+        }
+        public static void SaveLogs()
+        {
+            string jsonLogs = JsonSerializer.Serialize(Logs);
+            File.WriteAllText(_pathToLogs, jsonLogs);
         }
         public static string TrimLink(string link)
         {
             var parsedLink = new Uri(link);
             return parsedLink.Host;
-
         }
         private static bool IsValidUrl(string url)
         {
@@ -69,24 +79,31 @@ namespace Link_statuses
                     await bot.SendMessage(userId,
                         "You are registered now!\n\n" +
                         "This bot helps you track the status of your favorite links (websites).\n" +
-                        "Commands:\n" +
-                        "/add <link> - Add a link to tracking\n" +
-                        "/delete <link> - Remove a link from tracking\n" +
-                        "/show - Show all tracked links\n" +
-                        "/clear - Remove all tracked links\n\n" +
-                        "The bot will periodically check your links and notify you if any become unreachable."
+                        "Click /manual to learn more"
                     );
                     return;
                 }
 
                 await bot.SendMessage(userId,
-                         "Commands:\n" +
-                         "/add <link> - Add a link to tracking\n" +
-                         "/delete <link> - Remove a link from tracking\n" +
-                         "/show - Show all tracked links\n" +
-                         "/clear - Remove all tracked links\n\n" +
-                         "The bot will periodically check your links and notify you if any become unreachable."
+                        "This bot helps you track the status of your favorite links (websites).\n" +
+                        "Click /manual to learn more"
                      );
+            }
+            else if (command == "/manual")
+            {
+                await bot.SendMessage(userId,
+                    "Commands:\n" +
+                    "/add <link> - Add a link to tracking\n" +
+                    "/delete <link> - Remove a link from tracking\n" +
+                    "/show - Show all tracked links\n" +
+                    "/clear - Remove all tracked links\n" +
+                    "/logs - Show logs of link status checks\n" +
+                    "/deleteLog <index> - Delete a specific log entry by its index\n" +
+                    "/clearLogs - Remove all log entries\n" +
+                    "/subscribe - Subscribe to periodic status updates about your links\n" +
+                    "/unsubscribe - Unsubscribe from periodic status updates about your links\n\n" +
+                    "The bot will periodically check your links and notify you if any become unreachable."
+                );
             }
             else if (command == "/show")
             {
@@ -102,9 +119,24 @@ namespace Link_statuses
                     var response = await Program.Status(link);
                     if (response == 0)
                         message.AppendLine($"Link {link} is unreachable ❌");
-                    else 
+                    else
                         message.AppendLine($"Link {link} is reachable ✅\n");
-
+                    Logs.Add(new Log { Link = link, Status = response, Timestamp = DateTimeOffset.UtcNow });
+                }
+                SaveLogs();
+                await bot.SendMessage(userId, message.ToString());
+            }
+            else if (command == "/logs")
+            {
+                if (Logs.Count == 0)
+                {
+                    await bot.SendMessage(userId, "No logs available.");
+                    return;
+                }
+                StringBuilder message = new StringBuilder("Logs:\n");
+                foreach (var log in Logs)
+                {
+                    message.AppendLine($"{log.Timestamp}: Link {log.Link} returned status {log.Status}");
                 }
                 await bot.SendMessage(userId, message.ToString());
             }
@@ -162,6 +194,41 @@ namespace Link_statuses
                 SaveUsersData();
                 await bot.SendMessage(userId, "Link removed from tracking.");
             }
+            else if (command == "/deleteLog")
+            {
+                if (Logs.Count == 0)
+                {
+                    await bot.SendMessage(userId, "No logs available.");
+                    return;
+                }
+
+                if (int.TryParse(userMessage, out int logIndex))
+                {
+                    if (logIndex < 1 || logIndex > Logs.Count)
+                    {
+                        await bot.SendMessage(userId, "Invalid log index.");
+                        return;
+                    }
+                    Logs.RemoveAt(logIndex - 1);
+                    SaveLogs();
+                    await bot.SendMessage(userId, "Log entry removed.");
+                }
+                else
+                {
+                    await bot.SendMessage(userId, "Please provide a valid log index to delete.");
+                }
+            }
+            else if (command == "/clearLogs")
+            {
+                if (Logs.Count == 0)
+                {
+                    await bot.SendMessage(userId, "No logs available.");
+                    return;
+                }
+                Logs.Clear();
+                SaveLogs();
+                await bot.SendMessage(userId, "All log entries have been removed.");
+            }
             else if (command == "/clear")
             {
                 if (Users[userId].Links.Count == 0)
@@ -187,7 +254,7 @@ namespace Link_statuses
             }
             else
             {
-                await bot.SendMessage(userId, "Unknown command. Please use /start to see available commands.");
+                await bot.SendMessage(userId, "Unknown command. Please use /manual to see available commands.");
             }
         }
         public static async Task SendMessage(ITelegramBotClient bot, Dictionary<long, Dictionary<string, int>> responses)

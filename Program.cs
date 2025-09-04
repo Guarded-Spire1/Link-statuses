@@ -75,7 +75,7 @@ namespace Link_statuses
                                 responses[subscriber] = new Dictionary<string, int>();
                             }
                             responses[subscriber][link] = status;
-                            Handlers.Logs.Add(new Logs { Link = link, Status = status, Timestamp = DateTimeOffset.Now });
+                            Handlers.Logs.Add(new Log { Link = link, Status = status, Timestamp = DateTimeOffset.Now });
                         }
                     }
                 }

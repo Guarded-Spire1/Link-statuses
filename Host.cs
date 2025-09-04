@@ -17,14 +17,16 @@ namespace Link_statuses
             bot = new TelegramBotClient(token);
             bot.SetMyCommands(new[]
             {
-                new BotCommand{Command="/start", Description="Start bot"},
-                new BotCommand{Command="/show", Description="Show tracked links"},
-                new BotCommand{Command="/logs", Description="Show logs"},
-                new BotCommand{Command="/add", Description="Adding new link"},
-                new BotCommand{Command="/delete", Description="Deleting link from trackings"},
-                new BotCommand{Command="/clear", Description="Deleting all links from tracking"},
-                new BotCommand{Command="/subscribe", Description="Receiving timed notifications about your links"},
-                new BotCommand{Command="/unsubscribe", Description="Stop receiving timed notifications about your links"}
+                new BotCommand{Command="/manual", Description="manual for commands"},
+                //new BotCommand{Command="/show", Description="Show tracked links"},
+                //new BotCommand{Command="/logs", Description="Show logs"},
+                //new BotCommand{Command="/add", Description="Adding new link"},
+                //new BotCommand{Command="/delete", Description="Deleting link from trackings"},
+                //new BotCommand{Command="/clear", Description="Deleting all links from tracking"},
+                //new BotCommand{Command="/deleteLog", Description="Deleting log"},
+                //new BotCommand{Command="/clearLogs", Description="Deleting all logs"},
+                //new BotCommand{Command="/subscribe", Description="Receiving timed notifications about your links"},
+                //new BotCommand{Command="/unsubscribe", Description="Stop receiving timed notifications about your links"}
             });
         }
 

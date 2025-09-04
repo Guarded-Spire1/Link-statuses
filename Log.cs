@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Link_statuses
 {
-    public class Logs
+    public class Log
     {
         public DateTimeOffset Timestamp { get; set; }
         public string Link { get; set; }
