@@ -1,6 +1,4 @@
-﻿
-
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Timers;
 using Telegram.Bot;
 using Telegram.Bot.Types;
@@ -23,15 +21,15 @@ namespace Link_statuses
             telegramBot.Start();
 
 
-            //timer = new System.Timers.Timer(4000);
-            //timer.Elapsed += OnTimedEvent;
-            //timer.AutoReset = true;
-            //timer.Enabled = true;
+            timer = new System.Timers.Timer(3000);
+            timer.Elapsed += OnTimedEvent;
+            timer.AutoReset = true;
+            timer.Enabled = true;
 
             Console.ReadLine();
 
-            //timer.Stop();
-            //timer.Dispose();
+            timer.Stop();
+            timer.Dispose();
             client.Dispose();
         }
 
@@ -41,7 +39,7 @@ namespace Link_statuses
         {
             try
             {
-                HttpResponseMessage response = await client.GetAsync(link);
+                HttpResponseMessage response = await client.GetAsync("http://" + link);
                 return ((int)response.StatusCode);
             }
             catch
@@ -49,22 +47,41 @@ namespace Link_statuses
                 return 0;
             }
         }
-        //static void OnTimedEvent(object? source, ElapsedEventArgs e)
-        //{
-        //    Task.Run(async () =>
-        //    {
-        //        if (Handlers._usersUrls != null && Handlers._usersUrls.Count != 0)
-        //        {
-        //           var responeses = new Dictionary<string, int>();
-        //            foreach (var link in Handlers._usersUrls)
-        //            {
-        //                var response = await Status("http://" + link);
-        //                responeses.Add(link, response);
-        //            }
-        //            await Handlers.SendMessage(telegramBot.bot, responeses);
-        //        }
-        //        else { Console.WriteLine("No links are being tracked"); }
-        //    });
-        //}
+        static void OnTimedEvent(object? source, ElapsedEventArgs e)
+        {
+            Task.Run(async () =>
+            {
+
+                var subscribers = new List<long>();
+                foreach (var user in Handlers.Users)
+                {
+                    if (user.Value.ReceiveBroadcast)
+                    {
+                        subscribers.Add(user.Key);
+                    }
+                }
+
+                if (subscribers.Count == 0) return;
+                var responses = new Dictionary<long, Dictionary<string, int>>();
+                foreach (var subscriber in subscribers)
+                {
+                    if (Handlers.Users.TryGetValue(subscriber, out var user))
+                    {
+                        foreach (var link in user.Links)
+                        {
+                            int status = await Status(link);
+                            if (!responses.ContainsKey(subscriber))
+                            {
+                                responses[subscriber] = new Dictionary<string, int>();
+                            }
+                            responses[subscriber][link] = status;
+                            Handlers.Logs.Add(new Logs { Link = link, Status = status, Timestamp = DateTimeOffset.Now });
+                        }
+                    }
+                }
+                Handlers.SaveLogs();
+                await Handlers.SendMessage(telegramBot.bot, responses);
+            });
+        }
     }
 }

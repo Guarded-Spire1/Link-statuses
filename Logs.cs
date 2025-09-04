@@ -6,9 +6,10 @@ using System.Threading.Tasks;
 
 namespace Link_statuses
 {
-    public class BotUser
+    public class Logs
     {
-        public List<string> Links { get; set; } = new List<string>();
-        public bool ReceiveBroadcast { get; set; } = false;
+        public DateTimeOffset Timestamp { get; set; }
+        public string Link { get; set; }
+        public int Status { get; set; }
     }
 }

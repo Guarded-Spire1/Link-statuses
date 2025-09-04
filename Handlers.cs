@@ -15,7 +15,7 @@ namespace Link_statuses
     {
         private readonly static string _folder = Path.Combine(AppContext.BaseDirectory, "Data");
         private readonly static string _pathToUsersData = Path.Combine(_folder, "usersData");
-
+        private 
         public static readonly Dictionary<long, BotUser> Users = new Dictionary<long, BotUser>();
         static Handlers()
         {
@@ -27,13 +27,11 @@ namespace Link_statuses
             string json = File.ReadAllText(_pathToUsersData);
             Users = JsonSerializer.Deserialize<Dictionary<long, BotUser>>(json) ?? new Dictionary<long, BotUser>();
         }
-
         public static void SaveUsersData()
         {
             string json = JsonSerializer.Serialize(Users);
             File.WriteAllText(_pathToUsersData, json);
         }
-
         public static string TrimLink(string link)
         {
             var parsedLink = new Uri(link);
@@ -45,7 +43,6 @@ namespace Link_statuses
             return Uri.TryCreate(url, UriKind.Absolute, out Uri? uriResult)
                 && (uriResult.Scheme == Uri.UriSchemeHttp || uriResult.Scheme == Uri.UriSchemeHttps);
         }
-
         public static async Task MessageHandle(ITelegramBotClient bot, Update update)
         {
             if (update.Message == null || string.IsNullOrWhiteSpace(update.Message.Text))
@@ -102,7 +99,12 @@ namespace Link_statuses
 
                 foreach (var link in Users[userId].Links)
                 {
-                    message.AppendLine($"{link}\n");
+                    var response = await Program.Status(link);
+                    if (response == 0)
+                        message.AppendLine($"Link {link} is unreachable ❌");
+                    else 
+                        message.AppendLine($"Link {link} is reachable ✅\n");
+
                 }
                 await bot.SendMessage(userId, message.ToString());
             }
@@ -171,27 +173,42 @@ namespace Link_statuses
                 SaveUsersData();
                 await bot.SendMessage(userId, "All links have been removed from tracking.");
             }
+            else if (command == "/subscribe")
+            {
+                Users[userId].ReceiveBroadcast = true;
+                SaveUsersData();
+                await bot.SendMessage(userId, "You have subscribed to broadcast messages.");
+            }
+            else if (command == "/unsubscribe")
+            {
+                Users[userId].ReceiveBroadcast = false;
+                SaveUsersData();
+                await bot.SendMessage(userId, "You have unsubscribed from broadcast messages.");
+            }
             else
             {
                 await bot.SendMessage(userId, "Unknown command. Please use /start to see available commands.");
             }
         }
-
-        //public static async Task SendMessage(ITelegramBotClient bot, Dictionary<string, int> responses)
-        //{
-        //    StringBuilder message = new StringBuilder("Currently tracked links statuses: \n");
-        //    foreach (var response in responses)
-        //    {
-        //        if (response.Value == 0)
-        //            message.AppendLine($"Link {response.Key} is unreachable ❌");
-        //        else
-        //            message.AppendLine($"Link {response.Key} is reachable ✅");
-        //    }
-        //    foreach (var id in _users)
-        //    {
-        //        await bot.SendMessage(id.Key, message.ToString());
-        //    }
-        //}
+        public static async Task SendMessage(ITelegramBotClient bot, Dictionary<long, Dictionary<string, int>> responses)
+        {
+            StringBuilder message = new StringBuilder("Currently tracked links statuses: \n");
+            foreach (var response in responses.Values)
+            {
+                foreach (var linkStatus in response)
+                {
+                    if (linkStatus.Value == 0)
+                        message.AppendLine($"Link {linkStatus.Key} is unreachable ❌");
+                    else
+                        message.AppendLine($"Link {linkStatus.Key} is reachable ✅");
+                }
+            }
+            message.AppendLine("\nThis message is sent automatically every hour. If you wish to stop receiving, click /unsubscribe button");
+            foreach (var user in responses.Keys)
+            {
+                await bot.SendMessage(user, message.ToString());
+            }
+        }
 
     }
 }
