@@ -266,22 +266,23 @@ namespace Link_statuses
         }
         public static async Task SendMessage(ITelegramBotClient bot, Dictionary<long, Dictionary<string, int>> responses) // send message to users who want to receive broadcast if any of their links is unreachable
         {
-            bool hasIssues = responses.Values.Any(resp => resp.Values.Any(status => status == 0));
-            if (!hasIssues) return;
+            foreach(var response in responses)
+            {
+                long userId = response.Key;
+                var linksStatus = response.Value;
 
-            StringBuilder message = new StringBuilder("Something went wrong: \n");
-            foreach (var response in responses.Values)
-            {
-                foreach (var linkStatus in response)
+                var unreachableLinks = linksStatus.Where(ls => ls.Value == 0).ToList();
+                if(unreachableLinks.Count == 0) { continue; }
+
+                StringBuilder message = new StringBuilder("Broadcast: The following links are unreachable:\n");
+                foreach(var link in unreachableLinks)
                 {
-                    if (linkStatus.Value == 0)
-                        message.AppendLine($"Link {linkStatus.Key} is unreachable ❌");
+                    message.AppendLine($"Link {link.Key} is unreachable ❌");
                 }
-            }
-            message.AppendLine("\nThis message is sent automatically every hour. If you wish to stop receiving, click /unsubscribe button");
-            foreach (var user in responses.Keys)
-            {
-                await bot.SendMessage(user, message.ToString());
+
+                message.AppendLine("\nThis message is sent automatically every hour." +
+                    "If you wish to stop receiving, click /unsubscribe button");
+                await bot.SendMessage(userId, message.ToString());
             }
         }
 
