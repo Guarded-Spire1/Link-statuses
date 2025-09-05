@@ -40,7 +40,14 @@ namespace Link_statuses
             try
             {
                 HttpResponseMessage response = await client.GetAsync("http://" + link);
-                return ((int)response.StatusCode);
+                if(response.IsSuccessStatusCode)
+                {
+                    return ((int)response.StatusCode);
+                }
+                else
+                {
+                    return 0;
+                }
             }
             catch
             {
