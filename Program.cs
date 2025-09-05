@@ -12,16 +12,15 @@ namespace Link_statuses
         static System.Timers.Timer? timer;
         static async Task Main()
         {
-            //"7446920723:AAHF1ZpctjnHIBPIdAvr46DTZEO9OIGHCqU"
-            //Console.WriteLine("TelegramBot token: ");  Потом включи
-            //string BotToken = Console.ReadLine();
+            Console.WriteLine("TelegramBot token: ");
+            string BotToken = Console.ReadLine();
 
-            telegramBot = new Host("7446920723:AAHF1ZpctjnHIBPIdAvr46DTZEO9OIGHCqU");
+            telegramBot = new Host(BotToken);
             telegramBot.OnMessage = Handlers.MessageHandle;
             telegramBot.Start();
 
 
-            timer = new System.Timers.Timer(3000);
+            timer = new System.Timers.Timer(20000);
             timer.Elapsed += OnTimedEvent;
             timer.AutoReset = true;
             timer.Enabled = true;
@@ -39,7 +38,7 @@ namespace Link_statuses
         {
             try
             {
-                HttpResponseMessage response = await client.GetAsync("http://" + link);
+                HttpResponseMessage response = await client.GetAsync(link);
                 if(response.IsSuccessStatusCode)
                 {
                     return ((int)response.StatusCode);
@@ -58,7 +57,6 @@ namespace Link_statuses
         {
             Task.Run(async () =>
             {
-
                 var subscribers = new List<long>();
                 foreach (var user in Handlers.Users)
                 {
@@ -82,11 +80,11 @@ namespace Link_statuses
                                 responses[subscriber] = new Dictionary<string, int>();
                             }
                             responses[subscriber][link] = status;
-                            Handlers.Logs.Add(new Log { Link = link, Status = status, Timestamp = DateTimeOffset.Now });
+                            Handlers.Logs[subscriber].Add(new Log { Link = link, Status = status, Timestamp = DateTimeOffset.Now });
                         }
                     }
                 }
-                Handlers.SaveLogs();
+                Handlers.SaveUsersLogs();
                 await Handlers.SendMessage(telegramBot.bot, responses);
             });
         }

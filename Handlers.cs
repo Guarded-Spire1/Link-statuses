@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -17,7 +18,7 @@ namespace Link_statuses
         private readonly static string _pathToUsersData = Path.Combine(_folder, "usersData");
         private readonly static string _pathToLogs = Path.Combine(_folder, "logs.txt");
         public static readonly Dictionary<long, BotUser> Users = new Dictionary<long, BotUser>();
-        public static readonly List<Log>Logs = new List<Log>();
+        public static readonly Dictionary<long, List<Log>> Logs = new Dictionary<long, List<Log>>();
         static Handlers()
         {
             Directory.CreateDirectory(_folder);
@@ -26,28 +27,30 @@ namespace Link_statuses
                 File.WriteAllText(_pathToUsersData, "{}");
 
             if (!File.Exists(_pathToLogs))
-                File.WriteAllText(_pathToLogs, "[]");
+                File.WriteAllText(_pathToLogs, "{}");
 
             string jsonUsers = File.ReadAllText(_pathToUsersData);
             string jsonLogs = File.ReadAllText(_pathToLogs);
-            Users = JsonSerializer.Deserialize<Dictionary<long, BotUser>>(jsonUsers) ?? new Dictionary<long, BotUser>();
-            Logs = JsonSerializer.Deserialize<List<Log>>(jsonLogs) ?? new List<Log>();
+
+            Logs = JsonSerializer.Deserialize<Dictionary<long, List<Log>>>(jsonLogs)!;
+            Users = JsonSerializer.Deserialize<Dictionary<long, BotUser>>(jsonUsers)!;
+
         }
         public static void SaveUsersData()
         {
             string jsonUsers = JsonSerializer.Serialize(Users);
             File.WriteAllText(_pathToUsersData, jsonUsers);
         }
-        public static void SaveLogs()
+        public static void SaveUsersLogs()
         {
             string jsonLogs = JsonSerializer.Serialize(Logs);
             File.WriteAllText(_pathToLogs, jsonLogs);
         }
-        public static string TrimLink(string link)
-        {
-            var parsedLink = new Uri(link);
-            return parsedLink.Host;
-        }
+        //public static string TrimLink(string link)
+        //{
+        //    var parsedLink = new Uri(link);
+        //    return parsedLink.Host;
+        //}
         private static bool IsValidUrl(string url)
         {
             return Uri.TryCreate(url, UriKind.Absolute, out Uri? uriResult)
@@ -69,6 +72,11 @@ namespace Link_statuses
             string userMessage = string.Join(" ", update.Message.Text
                                     .Split(' ', StringSplitOptions.RemoveEmptyEntries)
                                     .Skip(1));
+
+            if (!Logs.ContainsKey(userId))
+                Logs[userId] = new List<Log>();
+            var userLogs = Logs[userId];
+
 
             if (command == "/start")
             {
@@ -121,23 +129,22 @@ namespace Link_statuses
                         message.AppendLine($"Link {link} is unreachable ❌");
                     else
                         message.AppendLine($"Link {link} is reachable ✅\n");
-                    Logs.Add(new Log { Link = link, Status = response, Timestamp = DateTimeOffset.UtcNow });
+                    userLogs.Add(new Log { Link = link, Status = response, Timestamp = DateTimeOffset.UtcNow });
                 }
-                SaveLogs();
+                SaveUsersLogs();
                 await bot.SendMessage(userId, message.ToString());
             }
             else if (command == "/logs")
             {
-                if (Logs.Count == 0)
+                if (userLogs.Count == 0)
                 {
                     await bot.SendMessage(userId, "No logs available.");
                     return;
                 }
                 StringBuilder message = new StringBuilder("Logs:\n");
-                foreach (var log in Logs)
-                {
+                foreach (var log in userLogs)
                     message.AppendLine($"{log.Timestamp}: Link {log.Link} returned status {log.Status}");
-                }
+
                 await bot.SendMessage(userId, message.ToString());
             }
             else if (command == "/add")
@@ -153,13 +160,13 @@ namespace Link_statuses
                     return;
                 }
 
-                if (Users[userId].Links.Contains(TrimLink(userMessage)))
+                if (Users[userId].Links.Contains(userMessage))
                 {
                     await bot.SendMessage(userId, "This link is already being tracked.");
                     return;
                 }
 
-                Users[userId].Links.Add(TrimLink(userMessage));
+                Users[userId].Links.Add(userMessage);
                 SaveUsersData();
                 await bot.SendMessage(userId, "Link added to tracking.");
 
@@ -178,7 +185,7 @@ namespace Link_statuses
                     return;
                 }
 
-                if (!Users[userId].Links.Contains(TrimLink(userMessage)))
+                if (!Users[userId].Links.Contains(userMessage))
                 {
                     await bot.SendMessage(userId, "This link is not being tracked.");
                     return;
@@ -190,13 +197,13 @@ namespace Link_statuses
                     return;
                 }
 
-                Users[userId].Links.Remove(TrimLink(userMessage));
+                Users[userId].Links.Remove(userMessage);
                 SaveUsersData();
                 await bot.SendMessage(userId, "Link removed from tracking.");
             }
             else if (command == "/deleteLog")
             {
-                if (Logs.Count == 0)
+                if (userLogs.Count == 0)
                 {
                     await bot.SendMessage(userId, "No logs available.");
                     return;
@@ -204,13 +211,13 @@ namespace Link_statuses
 
                 if (int.TryParse(userMessage, out int logIndex))
                 {
-                    if (logIndex < 1 || logIndex > Logs.Count)
+                    if (logIndex < 1 || logIndex > userLogs.Count)
                     {
                         await bot.SendMessage(userId, "Invalid log index.");
                         return;
                     }
-                    Logs.RemoveAt(logIndex - 1);
-                    SaveLogs();
+                    userLogs.RemoveAt(logIndex - 1);
+                    SaveUsersLogs();
                     await bot.SendMessage(userId, "Log entry removed.");
                 }
                 else
@@ -220,13 +227,13 @@ namespace Link_statuses
             }
             else if (command == "/clearLogs")
             {
-                if (Logs.Count == 0)
+                if (userLogs.Count == 0)
                 {
                     await bot.SendMessage(userId, "No logs available.");
                     return;
                 }
-                Logs.Clear();
-                SaveLogs();
+                userLogs.Clear();
+                SaveUsersLogs();
                 await bot.SendMessage(userId, "All log entries have been removed.");
             }
             else if (command == "/clear")
@@ -259,15 +266,16 @@ namespace Link_statuses
         }
         public static async Task SendMessage(ITelegramBotClient bot, Dictionary<long, Dictionary<string, int>> responses)
         {
-            StringBuilder message = new StringBuilder("Currently tracked links statuses: \n");
+            bool hasIssues = responses.Values.Any(resp => resp.Values.Any(status => status == 0));
+            if (!hasIssues) return;
+
+            StringBuilder message = new StringBuilder("Something went wrong: \n");
             foreach (var response in responses.Values)
             {
                 foreach (var linkStatus in response)
                 {
                     if (linkStatus.Value == 0)
                         message.AppendLine($"Link {linkStatus.Key} is unreachable ❌");
-                    else
-                        message.AppendLine($"Link {linkStatus.Key} is reachable ✅");
                 }
             }
             message.AppendLine("\nThis message is sent automatically every hour. If you wish to stop receiving, click /unsubscribe button");
