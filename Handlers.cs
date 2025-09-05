@@ -56,7 +56,7 @@ namespace Link_statuses
             return Uri.TryCreate(url, UriKind.Absolute, out Uri? uriResult)
                 && (uriResult.Scheme == Uri.UriSchemeHttp || uriResult.Scheme == Uri.UriSchemeHttps);
         }
-        public static async Task MessageHandle(ITelegramBotClient bot, Update update)
+        public static async Task MessageHandle(ITelegramBotClient bot, Update update) // handle all bot commands
         {
             if (update.Message == null || string.IsNullOrWhiteSpace(update.Message.Text))
             {
@@ -264,7 +264,7 @@ namespace Link_statuses
                 await bot.SendMessage(userId, "Unknown command. Please use /manual to see available commands.");
             }
         }
-        public static async Task SendMessage(ITelegramBotClient bot, Dictionary<long, Dictionary<string, int>> responses)
+        public static async Task SendMessage(ITelegramBotClient bot, Dictionary<long, Dictionary<string, int>> responses) // send message to users who want to receive broadcast if any of their links is unreachable
         {
             bool hasIssues = responses.Values.Any(resp => resp.Values.Any(status => status == 0));
             if (!hasIssues) return;

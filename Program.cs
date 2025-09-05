@@ -15,12 +15,13 @@ namespace Link_statuses
             Console.WriteLine("TelegramBot token: ");
             string BotToken = Console.ReadLine();
 
+
             telegramBot = new Host(BotToken);
             telegramBot.OnMessage = Handlers.MessageHandle;
             telegramBot.Start();
 
 
-            timer = new System.Timers.Timer(20000);
+            timer = new System.Timers.Timer(60000); //time interval in milliseconds (60000 ms = 1 minute)
             timer.Elapsed += OnTimedEvent;
             timer.AutoReset = true;
             timer.Enabled = true;
@@ -34,7 +35,7 @@ namespace Link_statuses
 
 
 
-        public static async Task<int> Status(string link)
+        public static async Task<int> Status(string link) // return status code or 0 if link is invalid or request failed
         {
             try
             {
@@ -53,7 +54,7 @@ namespace Link_statuses
                 return 0;
             }
         }
-        static void OnTimedEvent(object? source, ElapsedEventArgs e)
+        static void OnTimedEvent(object? source, ElapsedEventArgs e) // every minute check links of all users who want to receive broadcast
         {
             Task.Run(async () =>
             {
